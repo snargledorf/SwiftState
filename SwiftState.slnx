@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="SwiftState.Tests/SwiftState.Tests.csproj" />
+  <Project Path="SwiftState/SwiftState.csproj" />
+</Solution>
