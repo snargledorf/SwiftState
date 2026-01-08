@@ -13,7 +13,15 @@ SwiftState is a lightweight, fluent state machine library for .NET. It allows yo
 
 ## Installation
 
-NuGet package coming soon
+[![NuGet version](https://img.shields.io/nuget/v/SwiftState.svg)](https://www.nuget.org/packages/SwiftState/)
+
+You can install SwiftState via NuGet Package Manager:
+
+```bash
+dotnet add package SwiftState
+```
+
+Or via the NuGet gallery: [https://www.nuget.org/packages/SwiftState/](https://www.nuget.org/packages/SwiftState/)
 
 ## Usage
 
