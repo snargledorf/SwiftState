@@ -2,20 +2,28 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace SwiftState;
 
-public class State<TInput, TId>(TId id, Transitions<TInput, TId> transitions):IStateTransitionHandler<TInput, TId>
+public class State<TInput, TId>(TId id) : IStateTransitionHandler<TInput, TId>
 {
+    private Transitions<TInput, TId>? _transitions;
+    
     public TId Id { get; } = id;
     
-    public State<TInput, TId>? DefaultState { get; } = transitions.DefaultState;
+    public State<TInput, TId>? DefaultState => Transitions.DefaultState;
 
-    public bool HasTransitions { get; } = transitions.HasTransitions;
+    public bool HasTransitions => Transitions.HasTransitions;
+
+    internal Transitions<TInput, TId> Transitions
+    {
+        get => _transitions ?? throw new InvalidOperationException("State transitions not initialized");
+        set => _transitions = value;
+    }
 
     public bool TryTransition(TInput input, [NotNullWhen(true)] out State<TInput, TId>? nextState)
     {
-        if (transitions.DirectInputTransitions.TryGetValue(input, out nextState))
+        if (Transitions.DirectInputTransitions.TryGetValue(input, out nextState))
             return true;
 
-        if (transitions.TryConditionalTransitions?.Invoke(input, out nextState) ?? false)
+        if (Transitions.TryConditionalTransitions?.Invoke(input, out nextState) ?? false)
             return true;
         
         nextState = DefaultState;
