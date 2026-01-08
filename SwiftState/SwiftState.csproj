@@ -10,12 +10,18 @@
         <Description>SwiftState is a lightweight, fluent state machine library</Description>
         <PackageProjectUrl>https://github.com/snargledorf/SwiftState</PackageProjectUrl>
         <PackageLicenseFile>LICENSE</PackageLicenseFile>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
         <RepositoryUrl>https://github.com/snargledorf/SwiftState</RepositoryUrl>
         <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+        <Version>1.0.1</Version>
     </PropertyGroup>   
     
     <ItemGroup>
         <None Include="$(SolutionDir)\LICENSE" Pack="true" PackagePath=""/>
+    </ItemGroup>
+    
+    <ItemGroup>
+        <None Include="$(SolutionDir)\README.md" Pack="true" PackagePath=""/>
     </ItemGroup>
 
 </Project>
