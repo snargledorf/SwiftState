@@ -8,4 +8,9 @@ public record Transitions<TInput, TData>(
     public bool HasTransitions { get; } = DirectInputTransitions.Count > 0 || 
                                           TryConditionalTransitions is not null ||
                                           DefaultState is not null;
+
+    public bool HasInputTransitions { get; } = DirectInputTransitions.Count > 0 ||
+                                               TryConditionalTransitions is not null;
+    
+    public bool HasDefaultTransition { get; } = DefaultState is not null;
 }

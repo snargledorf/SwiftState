@@ -12,6 +12,10 @@ public class State<TInput, TId>(TId id) : IStateTransitionHandler<TInput, TId>
 
     public bool HasTransitions => Transitions.HasTransitions;
 
+    public bool HasInputTransitions => Transitions.HasInputTransitions;
+    
+    public bool HasDefaultTransition => Transitions.HasDefaultTransition;
+
     internal Transitions<TInput, TId> Transitions
     {
         get => _transitions ?? throw new InvalidOperationException("State transitions not initialized");
