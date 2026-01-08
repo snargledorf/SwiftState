@@ -219,4 +219,64 @@ public class StateTests
         await Assert.That(stateAAgain!.Id).IsEqualTo("StateA");
         await Assert.That(stateAAgain).IsEqualTo(stateA);
     }
+
+    [Test]
+    public async Task State_HasInputTransitions_ShouldReturnTrue_WhenDirectTransitionsExist()
+    {
+        var builder = new StateBuilder<char, string>("Init");
+        builder.When('a', "A");
+        State<char, string> state = builder.Build();
+        
+        await Assert.That(state.HasInputTransitions).IsTrue();
+    }
+
+    [Test]
+    public async Task State_HasInputTransitions_ShouldReturnTrue_WhenConditionalTransitionsExist()
+    {
+        var builder = new StateBuilder<int, string>("Init");
+        builder.When(i => i > 0, "A");
+        State<int, string> state = builder.Build();
+        
+        await Assert.That(state.HasInputTransitions).IsTrue();
+    }
+
+    [Test]
+    public async Task State_HasInputTransitions_ShouldReturnFalse_WhenNoTransitionsExist()
+    {
+        var builder = new StateBuilder<char, string>("Init");
+        State<char, string> state = builder.Build();
+        
+        await Assert.That(state.HasInputTransitions).IsFalse();
+    }
+
+    [Test]
+    public async Task State_HasDefaultTransition_ShouldReturnTrue_WhenDefaultExists()
+    {
+        var builder = new StateBuilder<char, string>("Init");
+        builder.Default("Default");
+        State<char, string> state = builder.Build();
+        
+        await Assert.That(state.HasDefaultTransition).IsTrue();
+    }
+
+    [Test]
+    public async Task State_HasDefaultTransition_ShouldReturnFalse_WhenNoDefaultExists()
+    {
+        var builder = new StateBuilder<char, string>("Init");
+        State<char, string> state = builder.Build();
+        
+        await Assert.That(state.HasDefaultTransition).IsFalse();
+    }
+
+    [Test]
+    public async Task State_HasInputAndDefaultTransitions_ShouldReturnTrueForBoth()
+    {
+        var builder = new StateBuilder<char, string>("Init");
+        builder.When('a', "A");
+        builder.Default("Default");
+        State<char, string> state = builder.Build();
+        
+        await Assert.That(state.HasInputTransitions).IsTrue();
+        await Assert.That(state.HasDefaultTransition).IsTrue();
+    }
 }
