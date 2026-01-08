@@ -193,4 +193,30 @@ public class StateTests
         await Assert.That(nextState).IsNotNull();
         await Assert.That(nextState!.Id).IsEqualTo("DefaultState");
     }
+
+    [Test]
+    public async Task State_WithCircularDependency_ShouldBuildAndTransitionCorrectly()
+    {
+        // Arrange
+        var builderA = new StateBuilder<char, string>("StateA");
+        var builderB = new StateBuilder<char, string>("StateB");
+
+        // A -> 'b' -> B
+        builderA.When('b', builderB);
+        // B -> 'a' -> A
+        builderB.When('a', builderA);
+
+        State<char, string> stateA = builderA.Build();
+
+        // Act
+        bool toB = stateA.TryTransition('b', out State<char, string>? stateB);
+        bool backToA = stateB!.TryTransition('a', out State<char, string>? stateAAgain);
+
+        // Assert
+        await Assert.That(toB).IsTrue();
+        await Assert.That(stateB.Id).IsEqualTo("StateB");
+        await Assert.That(backToA).IsTrue();
+        await Assert.That(stateAAgain!.Id).IsEqualTo("StateA");
+        await Assert.That(stateAAgain).IsEqualTo(stateA);
+    }
 }

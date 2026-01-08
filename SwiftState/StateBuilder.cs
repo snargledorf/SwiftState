@@ -56,6 +56,8 @@ public class StateBuilder<TInput, TData>(TData stateData) : IStateBuilder<TInput
     {
         if (_state is { } state)
             return state;
+        
+        _state = new State<TInput, TData>(stateData);
 
         TryConditionalTransitionsDelegate<TInput, TData>? tryConditionalTransitions =
             _conditionToStateBuilders.Count > 0 ? BuildTryConditionalTransitionsDelegate() : null;
@@ -68,7 +70,9 @@ public class StateBuilder<TInput, TData>(TData stateData) : IStateBuilder<TInput
         var transitions =
             new Transitions<TInput, TData>(directInputTransitions, tryConditionalTransitions, defaultTransitionState);
         
-        return _state = new State<TInput, TData>(stateData, transitions);
+        _state.Transitions = transitions;
+        
+        return _state;
     }
 
     private TryConditionalTransitionsDelegate<TInput, TData> BuildTryConditionalTransitionsDelegate()
