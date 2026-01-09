@@ -2,28 +2,44 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace SwiftState;
 
-public class State<TInput, TId>(TId id) : IStateTransitionHandler<TInput, TId>
+public sealed class State<TInput, TId>(TId id, bool isTerminal) : IStateTransitionHandler<TInput, TId>
 {
     private Transitions<TInput, TId>? _transitions;
     
     public TId Id { get; } = id;
     
-    public State<TInput, TId>? DefaultState => Transitions.DefaultState;
+    public State<TInput, TId>? DefaultState => Transitions?.DefaultState;
 
-    public bool HasTransitions => Transitions.HasTransitions;
+    public bool HasTransitions => Transitions?.HasTransitions ?? false;
 
-    public bool HasInputTransitions => Transitions.HasInputTransitions;
+    public bool HasInputTransitions => Transitions?.HasInputTransitions ?? false;
     
-    public bool HasDefaultTransition => Transitions.HasDefaultTransition;
+    public bool HasDefaultTransition => Transitions?.HasDefaultTransition ?? false;
+    
+    public bool IsTerminal { get; } = isTerminal;
 
-    internal Transitions<TInput, TId> Transitions
+    internal Transitions<TInput, TId>? Transitions
     {
-        get => _transitions ?? throw new InvalidOperationException("State transitions not initialized");
-        set => _transitions = value;
+        get => _transitions;
+        set
+        {
+            if (IsTerminal)
+                throw new InvalidOperationException("Terminal states cannot have transitions");
+            
+            _transitions = value;
+        }
     }
 
     public bool TryTransition(TInput input, [NotNullWhen(true)] out State<TInput, TId>? nextState)
     {
+        if (IsTerminal)
+        {
+            nextState = null;
+            return false;
+        }
+        
+        CheckTransitionsAreInitialized();
+
         if (Transitions.DirectInputTransitions.TryGetValue(input, out nextState))
             return true;
 
@@ -36,7 +52,21 @@ public class State<TInput, TId>(TId id) : IStateTransitionHandler<TInput, TId>
 
     public bool TryGetDefault([NotNullWhen(true)] out State<TInput, TId>? defaultState)
     {
+        if (IsTerminal)
+        {
+            defaultState = null;
+            return false;
+        }
+
+        CheckTransitionsAreInitialized();
         defaultState = DefaultState;
         return defaultState is not null;
+    }
+    
+    [MemberNotNull(nameof(Transitions))]
+    private void CheckTransitionsAreInitialized()
+    {
+        if (Transitions is null)
+            throw new InvalidOperationException("State transitions not initialized");
     }
 }

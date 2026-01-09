@@ -279,4 +279,165 @@ public class StateTests
         await Assert.That(state.HasInputTransitions).IsTrue();
         await Assert.That(state.HasDefaultTransition).IsTrue();
     }
+
+    [Test]
+    public async Task State_TerminalState_ShouldNotAllowTransitions()
+    {
+        // Arrange
+        var builder = new StateBuilder<char, string>("Terminal")
+        {
+            Terminal = true
+        };
+        State<char, string> state = builder.Build();
+
+        // Act
+        bool result = state.TryTransition('a', out State<char, string>? nextState);
+
+        // Assert
+        await Assert.That(state.IsTerminal).IsTrue();
+        await Assert.That(result).IsFalse();
+        await Assert.That(nextState).IsNull();
+    }
+
+    [Test]
+    public async Task StateBuilder_TerminalState_ShouldThrowWhenAddingTransitions()
+    {
+        // Arrange
+        var builder = new StateBuilder<char, string>("Terminal")
+        {
+            Terminal = true
+        };
+
+        // Act & Assert
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            builder.When('a', "StateA");
+            await Task.CompletedTask;
+        });
+        
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            builder.Default("Default");
+            await Task.CompletedTask;
+        });
+    }
+
+    [Test]
+    public async Task StateBuilder_SettingTerminalToTrue_ShouldThrowIfTransitionsExist()
+    {
+        // Arrange
+        var builder = new StateBuilder<char, string>("Initial");
+        builder.When('a', "StateA");
+
+        // Act & Assert
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            builder.Terminal = true;
+            await Task.CompletedTask;
+        });
+    }
+
+    [Test]
+    public async Task State_TransitionToTerminalState_ShouldWork()
+    {
+        // Arrange
+        var builder = new StateBuilder<char, string>("Start");
+        builder.When('a', "End", terminal: true);
+        State<char, string> startState = builder.Build();
+
+        // Act
+        bool result = startState.TryTransition('a', out State<char, string>? endState);
+
+        // Assert
+        await Assert.That(result).IsTrue();
+        await Assert.That(endState!.Id).IsEqualTo("End");
+        await Assert.That(endState.IsTerminal).IsTrue();
+    }
+
+    [Test]
+    public async Task StateBuilder_ClearTransitions_ShouldRemoveAllTransitions()
+    {
+        // Arrange
+        var builder = new StateBuilder<char, string>("Initial");
+        builder.When('a', "StateA");
+        builder.When(c => c == 'b', "StateB");
+        builder.Default("Default");
+
+        // Act
+        builder.ClearTransitions();
+        State<char, string> state = builder.Build();
+
+        // Assert
+        await Assert.That(state.HasTransitions).IsFalse();
+        await Assert.That(state.HasInputTransitions).IsFalse();
+        await Assert.That(state.HasDefaultTransition).IsFalse();
+    }
+
+    [Test]
+    public async Task StateBuilder_ClearTransitions_ShouldAllowAddingNewTransitions()
+    {
+        // Arrange
+        var builder = new StateBuilder<char, string>("Initial");
+        builder.When('a', "StateA");
+        builder.ClearTransitions();
+
+        // Act
+        builder.When('b', "StateB");
+        State<char, string> state = builder.Build();
+        bool result = state.TryTransition('b', out State<char, string>? nextState);
+
+        // Assert
+        await Assert.That(result).IsTrue();
+        await Assert.That(nextState!.Id).IsEqualTo("StateB");
+    }
+
+    [Test]
+    public async Task StateBuilder_ClearTransitions_ShouldThrowIfAlreadyBuilt()
+    {
+        // Arrange
+        var builder = new StateBuilder<char, string>("Initial");
+        builder.Build();
+
+        // Act & Assert
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            builder.ClearTransitions();
+            await Task.CompletedTask;
+        });
+    }
+
+    [Test]
+    public async Task StateBuilder_ConstructorWithTerminalTrue_ShouldSetTerminalProperty()
+    {
+        // Arrange
+        var builder = new StateBuilder<char, string>("Terminal", terminal: true);
+
+        // Assert
+        await Assert.That(builder.Terminal).IsTrue();
+    }
+
+    [Test]
+    public async Task StateBuilder_ConstructorWithTerminalTrue_ShouldCreateTerminalState()
+    {
+        // Arrange
+        var builder = new StateBuilder<char, string>("Terminal", terminal: true);
+        State<char, string> state = builder.Build();
+
+        // Assert
+        await Assert.That(state.IsTerminal).IsTrue();
+    }
+
+    [Test]
+    public async Task StateBuilder_ConstructorWithTerminalTrue_ShouldThrowWhenAddingTransitions()
+    {
+        // Arrange
+        var builder = new StateBuilder<char, string>("Terminal", terminal: true);
+
+        // Act & Assert
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            builder.When('a', "StateA");
+            await Task.CompletedTask;
+        });
+    }
 }
