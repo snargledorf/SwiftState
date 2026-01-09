@@ -2,10 +2,10 @@
 
 namespace SwiftState;
 
-public interface IStateTransitionHandler<TInput, TData>
+public interface IStateTransitionHandler<TInput, TId>
 {
-    State<TInput, TData>? DefaultState { get; }
+    State<TInput, TId>? DefaultState { get; }
     bool HasTransitions { get; }
-    bool TryTransition(TInput input, [NotNullWhen(true)] out State<TInput, TData>? nextState);
-    bool TryGetDefault([NotNullWhen(true)] out State<TInput, TData>? defaultState);
+    bool TryTransition(TInput input, [NotNullWhen(true)] out State<TInput, TId>? nextState);
+    bool TryGetDefault([NotNullWhen(true)] out State<TInput, TId>? defaultState);
 }

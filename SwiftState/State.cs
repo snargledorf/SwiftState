@@ -2,11 +2,9 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace SwiftState;
 
-public sealed class State<TInput, TId>(TId id, bool isTerminal) : IStateTransitionHandler<TInput, TId>
+public sealed record State<TInput, TId>(TId Id, bool IsTerminal) : IStateTransitionHandler<TInput, TId>
 {
     private Transitions<TInput, TId>? _transitions;
-    
-    public TId Id { get; } = id;
     
     public State<TInput, TId>? DefaultState => Transitions?.DefaultState;
 
@@ -15,8 +13,6 @@ public sealed class State<TInput, TId>(TId id, bool isTerminal) : IStateTransiti
     public bool HasInputTransitions => Transitions?.HasInputTransitions ?? false;
     
     public bool HasDefaultTransition => Transitions?.HasDefaultTransition ?? false;
-    
-    public bool IsTerminal { get; } = isTerminal;
 
     internal Transitions<TInput, TId>? Transitions
     {
