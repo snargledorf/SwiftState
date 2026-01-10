@@ -2,18 +2,23 @@ using System.Linq.Expressions;
 
 namespace SwiftState;
 
-public interface IStateBuilder<TInput, TData>
+public interface IStateBuilder<TInput, TId>
 {
-    IStateBuilder<TInput, TData> When(TInput input, TData data);
-    void When(TInput input, IStateBuilder<TInput, TData> stateBuilder);
+    bool Terminal { get; set; }
+    bool HasTransitions { get; }
+    
+    IStateBuilder<TInput, TId> When(TInput input, TId id, bool terminal = false);
+    void When(TInput input, IStateBuilder<TInput, TId> stateBuilder);
 
-    IStateBuilder<TInput, TData> When(Expression<Func<TInput, bool>> condition, TData data);
+    IStateBuilder<TInput, TId> When(Expression<Func<TInput, bool>> condition, TId id, bool terminal = false);
 
-    void When(Expression<Func<TInput, bool>> condition, IStateBuilder<TInput, TData> stateBuilder);
+    void When(Expression<Func<TInput, bool>> condition, IStateBuilder<TInput, TId> stateBuilder);
 
-    IStateBuilder<TInput, TData> Default(TData data);
+    IStateBuilder<TInput, TId> Default(TId id, bool terminal = false);
 
-    void Default(IStateBuilder<TInput, TData> defaultStateBuilder);
+    void Default(IStateBuilder<TInput, TId> defaultStateBuilder);
 
-    State<TInput, TData> Build();
+    void ClearTransitions();
+
+    State<TInput, TId> Build();
 }

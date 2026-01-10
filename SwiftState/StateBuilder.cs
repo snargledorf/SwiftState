@@ -3,102 +3,145 @@ using System.Linq.Expressions;
 
 namespace SwiftState;
 
-public class StateBuilder<TInput, TData>(TData stateData) : IStateBuilder<TInput, TData>
+public class StateBuilder<TInput, TId>(TId stateId, bool terminal = false) : IStateBuilder<TInput, TId>
     where TInput : notnull
 {
-    private readonly Dictionary<TInput, IStateBuilder<TInput, TData>> _inputToStateBuilder = new();
+    private bool _terminal = terminal;
+    
+    private readonly Dictionary<TInput, IStateBuilder<TInput, TId>> _inputToStateBuilder = new();
     private readonly HashSet<ConditionToStateBuilder> _conditionToStateBuilders = [];
-    
-    private IStateBuilder<TInput, TData>? _defaultStateBuilder;
-    
-    private State<TInput, TData>? _state;
-    
-    public IStateBuilder<TInput, TData> When(TInput input, TData data)
+
+    private IStateBuilder<TInput, TId>? _defaultStateBuilder;
+
+    private State<TInput, TId>? _state;
+
+    public TId Id { get; } = stateId;
+
+    public bool Terminal
     {
-        var stateBuilder = new StateBuilder<TInput, TData>(data);
+        get => _terminal;
+        set
+        {
+            CheckIfAlreadyBuilt();
+            if (HasTransitions)
+                throw new InvalidOperationException("Cannot change terminal state after transitions are defined");
+            _terminal = value;
+        }
+    }
+
+    public bool HasTransitions => _inputToStateBuilder.Count > 0 || _conditionToStateBuilders.Count > 0 || _defaultStateBuilder is not null;
+
+    public IStateBuilder<TInput, TId> When(TInput input, TId id, bool terminal = false)
+    {
+        IStateBuilder<TInput, TId> stateBuilder = CreateStateBuilder(id, terminal);
         When(input, stateBuilder);
         return stateBuilder;
     }
 
-    public void When(TInput input, IStateBuilder<TInput, TData> stateBuilder)
+    public void When(TInput input, IStateBuilder<TInput, TId> stateBuilder)
     {
         CheckIfAlreadyBuilt();
+        CheckIfTerminal();
         _inputToStateBuilder[input] = stateBuilder;
     }
 
-    public IStateBuilder<TInput, TData> When(Expression<Func<TInput, bool>> condition, TData data)
+    public IStateBuilder<TInput, TId> When(Expression<Func<TInput, bool>> condition, TId id, bool terminal = false)
     {
-        var tokenTypeStateBuilder = new StateBuilder<TInput, TData>(data);
+        IStateBuilder<TInput, TId> tokenTypeStateBuilder = CreateStateBuilder(id, terminal);
         When(condition, tokenTypeStateBuilder);
         return tokenTypeStateBuilder;
     }
 
-    public void When(Expression<Func<TInput, bool>> condition, IStateBuilder<TInput, TData> stateBuilder)
+    public void When(Expression<Func<TInput, bool>> condition, IStateBuilder<TInput, TId> stateBuilder)
     {
         CheckIfAlreadyBuilt();
+        CheckIfTerminal();
         _conditionToStateBuilders.Add(new ConditionToStateBuilder(condition, stateBuilder));
     }
 
-    public IStateBuilder<TInput, TData> Default(TData data)
+    public IStateBuilder<TInput, TId> Default(TId id, bool terminal = false)
     {
-        var defaultTokenStateBuilder = new StateBuilder<TInput, TData>(data);
+        IStateBuilder<TInput, TId> defaultTokenStateBuilder = CreateStateBuilder(id, terminal);
         Default(defaultTokenStateBuilder);
         return defaultTokenStateBuilder;
     }
 
-    public void Default(IStateBuilder<TInput, TData> defaultStateBuilder)
+    public void Default(IStateBuilder<TInput, TId> defaultStateBuilder)
     {
         CheckIfAlreadyBuilt();
+        CheckIfTerminal();
         _defaultStateBuilder = defaultStateBuilder;
     }
 
-    public State<TInput, TData> Build()
+    public void ClearTransitions()
+    {
+        CheckIfAlreadyBuilt();
+        
+        _defaultStateBuilder = null;
+        _inputToStateBuilder.Clear();
+        _conditionToStateBuilders.Clear();
+    }
+
+    public State<TInput, TId> Build()
     {
         if (_state is { } state)
             return state;
         
-        _state = new State<TInput, TData>(stateData);
+        _state = new State<TInput, TId>(Id, Terminal);
 
-        TryConditionalTransitionsDelegate<TInput, TData>? tryConditionalTransitions =
+        if (Terminal)
+            return _state;
+
+        TryConditionalTransitionsDelegate<TInput, TId>? tryConditionalTransitions =
             _conditionToStateBuilders.Count > 0 ? BuildTryConditionalTransitionsDelegate() : null;
 
-        FrozenDictionary<TInput, State<TInput, TData>> directInputTransitions =
+        FrozenDictionary<TInput, State<TInput, TId>> directInputTransitions =
             _inputToStateBuilder.ToFrozenDictionary(kvp => kvp.Key, kvp => kvp.Value.Build());
 
-        State<TInput, TData>? defaultTransitionState = _defaultStateBuilder?.Build();
-
+        State<TInput, TId>? defaultTransitionState = _defaultStateBuilder?.Build();
+        
         var transitions =
-            new Transitions<TInput, TData>(directInputTransitions, tryConditionalTransitions, defaultTransitionState);
-        
+            new Transitions<TInput, TId>(directInputTransitions, tryConditionalTransitions,
+                defaultTransitionState);
+
         _state.Transitions = transitions;
-        
+
         return _state;
     }
 
-    private TryConditionalTransitionsDelegate<TInput, TData> BuildTryConditionalTransitionsDelegate()
+    private TryConditionalTransitionsDelegate<TInput, TId> BuildTryConditionalTransitionsDelegate()
     {
         ParameterExpression inputParameterExpression = Expression.Parameter(typeof(TInput), "input");
-        ParameterExpression stateParameterExpression = Expression.Parameter(typeof(State<TInput, TData>).MakeByRefType(), "newState");
+        ParameterExpression stateParameterExpression = Expression.Parameter(typeof(State<TInput, TId>).MakeByRefType(), "newState");
         LabelTarget returnTarget = Expression.Label(typeof(bool));
 
         IEnumerable<Expression> conditionIfStatements = _conditionToStateBuilders.Select(csb =>
         {
-            State<TInput, TData> transitionState = csb.TokenizerStateBuilder.Build();
+            State<TInput, TId> transitionState = csb.TokenizerStateBuilder.Build();
             return BuildConditionalTransitionIfStatement(csb.ConditionExpression, transitionState, inputParameterExpression, stateParameterExpression, returnTarget);
         });
 
         IEnumerable<Expression> bodyStatements = conditionIfStatements
-            .Append(Expression.Assign(stateParameterExpression, Expression.Constant(null, typeof(State<TInput, TData>))))
+            .Append(Expression.Assign(stateParameterExpression, Expression.Constant(null, typeof(State<TInput, TId>))))
             .Append(Expression.Label(returnTarget, Expression.Constant(false)));
         
         BlockExpression body = Expression.Block(typeof(bool), bodyStatements);
 
-        return Expression.Lambda<TryConditionalTransitionsDelegate<TInput, TData>>(body, inputParameterExpression,
+        return Expression.Lambda<TryConditionalTransitionsDelegate<TInput, TId>>(body, inputParameterExpression,
             stateParameterExpression).Compile();
     }
 
+    private static IStateBuilder<TInput, TId> CreateStateBuilder(TId data, bool terminal)
+    {
+        var stateBuilder = new StateBuilder<TInput, TId>(data)
+        {
+            Terminal = terminal
+        };
+        return stateBuilder;
+    }
+
     private static Expression BuildConditionalTransitionIfStatement(Expression<Func<TInput, bool>> checkCondition,
-        State<TInput, TData> transitionState,
+        State<TInput, TId> transitionState,
         ParameterExpression inputParameter,
         ParameterExpression outParameter, 
         LabelTarget returnTarget)
@@ -122,7 +165,13 @@ public class StateBuilder<TInput, TData>(TData stateData) : IStateBuilder<TInput
             throw new InvalidOperationException("Builder has already been built");
     }
 
+    private void CheckIfTerminal()
+    {
+        if (Terminal)
+            throw new InvalidOperationException("Cannot define transitions on a terminal state");
+    }
+
     private readonly record struct ConditionToStateBuilder(
         Expression<Func<TInput, bool>> ConditionExpression,
-        IStateBuilder<TInput, TData> TokenizerStateBuilder);
+        IStateBuilder<TInput, TId> TokenizerStateBuilder);
 }
