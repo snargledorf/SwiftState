@@ -1,10 +1,9 @@
-using System.Collections.Frozen;
 using System.Linq.Expressions;
 
 namespace SwiftState;
 
 public class StateBuilder<TInput, TId>(TId stateId, bool terminal = false) : IStateBuilder<TInput, TId>
-    where TInput : notnull
+    where TInput : notnull where TId : notnull
 {
     private bool _terminal = terminal;
     
@@ -13,6 +12,14 @@ public class StateBuilder<TInput, TId>(TId stateId, bool terminal = false) : ISt
     private IStateBuilder<TInput, TId>? _defaultStateBuilder;
 
     private State<TInput, TId>? _state;
+    private StateBuilderContext? _context;
+
+    private StateBuilder(TId stateId, bool terminal, StateBuilderContext context) : this(stateId, terminal)
+    {
+        _context = context;
+    }
+    
+    private StateBuilderContext Context => _context ??= new StateBuilderContext(this);
 
     public TId Id { get; } = stateId;
 
@@ -32,12 +39,12 @@ public class StateBuilder<TInput, TId>(TId stateId, bool terminal = false) : ISt
 
     public IStateBuilder<TInput, TId> When(TInput input, TId id, bool terminal = false)
     {
-        IStateBuilder<TInput, TId> stateBuilder = CreateStateBuilder(id, terminal);
+        IStateBuilder<TInput, TId> stateBuilder = Context.GetStateBuilder(id, terminal);
         When(input, stateBuilder);
         return stateBuilder;
     }
 
-    public void When(TInput input, IStateBuilder<TInput, TId> stateBuilder)
+    private void When(TInput input, IStateBuilder<TInput, TId> stateBuilder)
     {
         CheckIfAlreadyBuilt();
         CheckIfTerminal();
@@ -46,26 +53,39 @@ public class StateBuilder<TInput, TId>(TId stateId, bool terminal = false) : ISt
 
     public IStateBuilder<TInput, TId> When(Expression<Func<TInput, bool>> condition, TId id, bool terminal = false)
     {
-        IStateBuilder<TInput, TId> tokenTypeStateBuilder = CreateStateBuilder(id, terminal);
+        IStateBuilder<TInput, TId> tokenTypeStateBuilder = Context.GetStateBuilder(id, terminal);
         When(condition, tokenTypeStateBuilder);
         return tokenTypeStateBuilder;
     }
 
-    public void When(Expression<Func<TInput, bool>> condition, IStateBuilder<TInput, TId> stateBuilder)
+    private void When(Expression<Func<TInput, bool>> condition, IStateBuilder<TInput, TId> stateBuilder)
     {
         CheckIfAlreadyBuilt();
         CheckIfTerminal();
         _conditionToStateBuilders.Add(new ConditionToStateBuilder(condition, stateBuilder));
     }
 
+    public IStateBuilder<TInput, TId> GotoWhen(TId id, bool terminal, params TInput[] inputs)
+    {
+        foreach (TInput input in inputs)
+            When(input, id, terminal);
+        
+        return Context.GetStateBuilder(id, terminal);
+    }
+
     public IStateBuilder<TInput, TId> Default(TId id, bool terminal = false)
     {
-        IStateBuilder<TInput, TId> defaultTokenStateBuilder = CreateStateBuilder(id, terminal);
+        IStateBuilder<TInput, TId> defaultTokenStateBuilder = Context.GetStateBuilder(id, terminal);
         Default(defaultTokenStateBuilder);
         return defaultTokenStateBuilder;
     }
 
-    public void Default(IStateBuilder<TInput, TId> defaultStateBuilder)
+    public IStateBuilder<TInput, TId> GetBuilderForState(TId id, bool terminal = false)
+    {
+        return Context.GetStateBuilder(id, terminal);
+    }
+
+    private void Default(IStateBuilder<TInput, TId> defaultStateBuilder)
     {
         CheckIfAlreadyBuilt();
         CheckIfTerminal();
@@ -123,17 +143,8 @@ public class StateBuilder<TInput, TId>(TId stateId, bool terminal = false) : ISt
         return Expression.Lambda<TryConditionalTransitionsDelegate<TInput, TId>>(body, inputParameterExpression,
             stateParameterExpression).Compile();
     }
-
-    private static IStateBuilder<TInput, TId> CreateStateBuilder(TId data, bool terminal)
-    {
-        var stateBuilder = new StateBuilder<TInput, TId>(data)
-        {
-            Terminal = terminal
-        };
-        return stateBuilder;
-    }
-
-    private static Expression BuildConditionalTransitionIfStatement(Expression<Func<TInput, bool>> checkCondition,
+    
+    private static ConditionalExpression BuildConditionalTransitionIfStatement(Expression<Func<TInput, bool>> checkCondition,
         State<TInput, TId> transitionState,
         ParameterExpression inputParameter,
         ParameterExpression outParameter, 
@@ -167,4 +178,22 @@ public class StateBuilder<TInput, TId>(TId stateId, bool terminal = false) : ISt
     private readonly record struct ConditionToStateBuilder(
         Expression<Func<TInput, bool>> ConditionExpression,
         IStateBuilder<TInput, TId> TokenizerStateBuilder);
+
+    internal class StateBuilderContext(IStateBuilder<TInput, TId> sourceBuilder)
+    {
+        private readonly Dictionary<TId, IStateBuilder<TInput, TId>> _stateBuilders = new()
+        {
+            { sourceBuilder.Id, sourceBuilder }
+        };
+
+        public IStateBuilder<TInput, TId> GetStateBuilder(TId stateId, bool terminal)
+        {
+            IStateBuilder<TInput, TId> stateBuilder = _stateBuilders.GetOrAdd(stateId, (newStateId) => new StateBuilder<TInput, TId>(newStateId, terminal, this));
+            
+            if (stateBuilder.Terminal != terminal)
+                throw new InvalidOperationException("Existing state builder has different terminal state than requested");
+            
+            return stateBuilder;
+        }
+    }
 }

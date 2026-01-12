@@ -199,12 +199,11 @@ public class StateTests
     {
         // Arrange
         var builderA = new StateBuilder<char, string>("StateA");
-        var builderB = new StateBuilder<char, string>("StateB");
 
         // A -> 'b' -> B
-        builderA.When('b', builderB);
+        IStateBuilder<char, string> builderB = builderA.When('b', "StateB");
         // B -> 'a' -> A
-        builderB.When('a', builderA);
+        builderB.When('a', "StateA");
 
         State<char, string> stateA = builderA.Build();
 
@@ -437,6 +436,109 @@ public class StateTests
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
         {
             builder.When('a', "StateA");
+            await Task.CompletedTask;
+        });
+    }
+
+    [Test]
+    public async Task State_GotoWhen_ShouldTransitionCorrectlyForAllInputs()
+    {
+        // Arrange
+        var builder = new StateBuilder<char, string>("Initial");
+        builder.GotoWhen("Target", false, 'a', 'b', 'c');
+        State<char, string> initialState = builder.Build();
+
+        // Act & Assert
+        foreach (char input in new[] { 'a', 'b', 'c' })
+        {
+            bool result = initialState.TryTransition(input, out State<char, string>? nextState);
+            await Assert.That(result).IsTrue();
+            await Assert.That(nextState).IsNotNull();
+            await Assert.That(nextState!.Id).IsEqualTo("Target");
+        }
+        
+        // Verify other input doesn't transition
+        bool resultD = initialState.TryTransition('d', out State<char, string>? nextStateD);
+        await Assert.That(resultD).IsFalse();
+    }
+
+    [Test]
+    public async Task State_GotoWhen_ShouldReturnTargetStateBuilder()
+    {
+        // Arrange
+        var builder = new StateBuilder<char, string>("Initial");
+        IStateBuilder<char, string> targetBuilder = builder.GotoWhen("Target", false, 'a');
+        
+        // Act
+        targetBuilder.When('b', "NextTarget");
+        State<char, string> initialState = builder.Build();
+        
+        // Assert
+        initialState.TryTransition('a', out State<char, string>? targetState);
+        bool result = targetState!.TryTransition('b', out State<char, string>? nextTargetState);
+        
+        await Assert.That(result).IsTrue();
+        await Assert.That(nextTargetState!.Id).IsEqualTo("NextTarget");
+    }
+
+    [Test]
+    public async Task State_GotoWhen_WithTerminalState_ShouldTransitionToTerminalState()
+    {
+        // Arrange
+        var builder = new StateBuilder<char, string>("Initial");
+        builder.GotoWhen("TerminalTarget", true, 'a', 'b');
+        State<char, string> initialState = builder.Build();
+
+        // Act
+        bool result = initialState.TryTransition('a', out State<char, string>? nextState);
+
+        // Assert
+        await Assert.That(result).IsTrue();
+        await Assert.That(nextState!.Id).IsEqualTo("TerminalTarget");
+        await Assert.That(nextState.IsTerminal).IsTrue();
+    }
+
+    [Test]
+    public async Task StateBuilder_When_WithDifferentTerminalFlag_ShouldThrowException()
+    {
+        // Arrange
+        var builder = new StateBuilder<char, string>("Initial");
+        builder.When('a', "Target", terminal: false);
+
+        // Act & Assert
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            builder.When('b', "Target", terminal: true);
+            await Task.CompletedTask;
+        });
+    }
+
+    [Test]
+    public async Task StateBuilder_GotoWhen_WithDifferentTerminalFlag_ShouldThrowException()
+    {
+        // Arrange
+        var builder = new StateBuilder<char, string>("Initial");
+        builder.GotoWhen("Target", false, 'a');
+
+        // Act & Assert
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            builder.GotoWhen("Target", true, 'b');
+            await Task.CompletedTask;
+        });
+    }
+
+    [Test]
+    public async Task StateBuilder_Default_WithDifferentTerminalFlag_ShouldThrowException()
+    {
+        // Arrange
+        var builder = new StateBuilder<char, string>("Initial");
+        builder.When('a', "Target", terminal: false);
+
+        // Act & Assert
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            builder.Default("Target", terminal: true);
             await Task.CompletedTask;
         });
     }
