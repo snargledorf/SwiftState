@@ -8,8 +8,7 @@ public class StateBuilder<TInput, TId>(TId stateId, bool terminal = false) : ISt
 {
     private bool _terminal = terminal;
     
-    private readonly Dictionary<TInput, IStateBuilder<TInput, TId>> _inputToStateBuilder = new();
-    private readonly HashSet<ConditionToStateBuilder> _conditionToStateBuilders = [];
+    private readonly List<ConditionToStateBuilder> _conditionToStateBuilders = [];
 
     private IStateBuilder<TInput, TId>? _defaultStateBuilder;
 
@@ -29,7 +28,7 @@ public class StateBuilder<TInput, TId>(TId stateId, bool terminal = false) : ISt
         }
     }
 
-    public bool HasTransitions => _inputToStateBuilder.Count > 0 || _conditionToStateBuilders.Count > 0 || _defaultStateBuilder is not null;
+    public bool HasTransitions => _conditionToStateBuilders.Count > 0 || _defaultStateBuilder is not null;
 
     public IStateBuilder<TInput, TId> When(TInput input, TId id, bool terminal = false)
     {
@@ -42,7 +41,7 @@ public class StateBuilder<TInput, TId>(TId stateId, bool terminal = false) : ISt
     {
         CheckIfAlreadyBuilt();
         CheckIfTerminal();
-        _inputToStateBuilder[input] = stateBuilder;
+        When(i => Equals(i, input), stateBuilder);
     }
 
     public IStateBuilder<TInput, TId> When(Expression<Func<TInput, bool>> condition, TId id, bool terminal = false)
@@ -78,7 +77,6 @@ public class StateBuilder<TInput, TId>(TId stateId, bool terminal = false) : ISt
         CheckIfAlreadyBuilt();
         
         _defaultStateBuilder = null;
-        _inputToStateBuilder.Clear();
         _conditionToStateBuilders.Clear();
     }
 
@@ -95,14 +93,9 @@ public class StateBuilder<TInput, TId>(TId stateId, bool terminal = false) : ISt
         TryConditionalTransitionsDelegate<TInput, TId>? tryConditionalTransitions =
             _conditionToStateBuilders.Count > 0 ? BuildTryConditionalTransitionsDelegate() : null;
 
-        FrozenDictionary<TInput, State<TInput, TId>> directInputTransitions =
-            _inputToStateBuilder.ToFrozenDictionary(kvp => kvp.Key, kvp => kvp.Value.Build());
-
         State<TInput, TId>? defaultTransitionState = _defaultStateBuilder?.Build();
         
-        var transitions =
-            new Transitions<TInput, TId>(directInputTransitions, tryConditionalTransitions,
-                defaultTransitionState);
+        var transitions = new Transitions<TInput, TId>(tryConditionalTransitions, defaultTransitionState);
 
         _state.Transitions = transitions;
 

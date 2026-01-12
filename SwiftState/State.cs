@@ -36,9 +36,6 @@ public sealed record State<TInput, TId>(TId Id, bool IsTerminal) : IStateTransit
         
         CheckTransitionsAreInitialized();
 
-        if (Transitions.DirectInputTransitions.TryGetValue(input, out nextState))
-            return true;
-
         if (Transitions.TryConditionalTransitions?.Invoke(input, out nextState) ?? false)
             return true;
         
