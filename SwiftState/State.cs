@@ -1,8 +1,9 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 
 namespace SwiftState;
 
-public sealed record State<TInput, TId>(TId Id, bool IsTerminal) : IStateTransitionHandler<TInput, TId>
+public sealed record State<TInput, TId>(TId Id, bool IsTerminal) : IStateTransitionHandler<TInput, TId> where TInput : notnull
 {
     private Transitions<TInput, TId>? _transitions;
     
@@ -36,7 +37,7 @@ public sealed record State<TInput, TId>(TId Id, bool IsTerminal) : IStateTransit
         
         CheckTransitionsAreInitialized();
 
-        if (Transitions.TryConditionalTransitions?.Invoke(input, out nextState) ?? false)
+        if (Transitions.TryConditionalTransitions?.TryGet(input, out nextState) ?? false)
             return true;
         
         nextState = DefaultState;
@@ -57,6 +58,7 @@ public sealed record State<TInput, TId>(TId Id, bool IsTerminal) : IStateTransit
     }
     
     [MemberNotNull(nameof(Transitions))]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void CheckTransitionsAreInitialized()
     {
         if (Transitions is null)
