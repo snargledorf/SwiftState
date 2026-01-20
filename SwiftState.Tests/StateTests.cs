@@ -542,4 +542,79 @@ public class StateTests
             await Task.CompletedTask;
         });
     }
+
+    [Test]
+    public async Task State_GotoWhen_WithConditions_ShouldTransitionCorrectly()
+    {
+        // Arrange
+        var builder = new StateBuilder<int, string>("Initial");
+        builder.GotoWhen("Target", false, i => i > 10, i => i < 5);
+        State<int, string> initialState = builder.Build();
+
+        // Act & Assert
+        // Case 1: i > 10
+        bool result1 = initialState.TryTransition(15, out State<int, string>? nextState1);
+        await Assert.That(result1).IsTrue();
+        await Assert.That(nextState1!.Id).IsEqualTo("Target");
+
+        // Case 2: i < 5
+        bool result2 = initialState.TryTransition(2, out State<int, string>? nextState2);
+        await Assert.That(result2).IsTrue();
+        await Assert.That(nextState2!.Id).IsEqualTo("Target");
+
+        // Case 3: No match
+        bool result3 = initialState.TryTransition(7, out State<int, string>? nextState3);
+        await Assert.That(result3).IsFalse();
+    }
+
+    [Test]
+    public async Task State_GotoWhen_WithConditions_ShouldReturnTargetStateBuilder()
+    {
+        // Arrange
+        var builder = new StateBuilder<int, string>("Initial");
+        IStateBuilder<int, string> targetBuilder = builder.GotoWhen("Target", false, i => i > 10);
+        
+        // Act
+        targetBuilder.When(i => i == 0, "NextTarget");
+        State<int, string> initialState = builder.Build();
+        
+        // Assert
+        initialState.TryTransition(15, out State<int, string>? targetState);
+        bool result = targetState!.TryTransition(0, out State<int, string>? nextTargetState);
+        
+        await Assert.That(result).IsTrue();
+        await Assert.That(nextTargetState!.Id).IsEqualTo("NextTarget");
+    }
+
+    [Test]
+    public async Task State_GotoWhen_WithConditions_AndTerminalState_ShouldTransitionToTerminalState()
+    {
+        // Arrange
+        var builder = new StateBuilder<int, string>("Initial");
+        builder.GotoWhen("TerminalTarget", true, i => i > 10, i => i < 5);
+        State<int, string> initialState = builder.Build();
+
+        // Act
+        bool result = initialState.TryTransition(15, out State<int, string>? nextState);
+
+        // Assert
+        await Assert.That(result).IsTrue();
+        await Assert.That(nextState!.Id).IsEqualTo("TerminalTarget");
+        await Assert.That(nextState.IsTerminal).IsTrue();
+    }
+
+    [Test]
+    public async Task StateBuilder_GotoWhen_WithConditions_AndDifferentTerminalFlag_ShouldThrowException()
+    {
+        // Arrange
+        var builder = new StateBuilder<int, string>("Initial");
+        builder.GotoWhen("Target", false, i => i > 10);
+
+        // Act & Assert
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            builder.GotoWhen("Target", true, i => i < 5);
+            await Task.CompletedTask;
+        });
+    }
 }

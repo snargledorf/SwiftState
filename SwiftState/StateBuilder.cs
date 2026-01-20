@@ -1,4 +1,6 @@
+using System.Collections.Frozen;
 using System.Linq.Expressions;
+using PredicateMap;
 
 namespace SwiftState;
 
@@ -46,19 +48,17 @@ public class StateBuilder<TInput, TId>(TId stateId, bool terminal = false) : ISt
 
     private void When(TInput input, IStateBuilder<TInput, TId> stateBuilder)
     {
-        CheckIfAlreadyBuilt();
-        CheckIfTerminal();
         When(i => Equals(i, input), stateBuilder);
     }
 
-    public IStateBuilder<TInput, TId> When(Expression<Func<TInput, bool>> condition, TId id, bool terminal = false)
+    public IStateBuilder<TInput, TId> When(Expression<Predicate<TInput>> condition, TId id, bool terminal = false)
     {
         IStateBuilder<TInput, TId> tokenTypeStateBuilder = Context.GetStateBuilder(id, terminal);
         When(condition, tokenTypeStateBuilder);
         return tokenTypeStateBuilder;
     }
 
-    private void When(Expression<Func<TInput, bool>> condition, IStateBuilder<TInput, TId> stateBuilder)
+    private void When(Expression<Predicate<TInput>> condition, IStateBuilder<TInput, TId> stateBuilder)
     {
         CheckIfAlreadyBuilt();
         CheckIfTerminal();
@@ -67,10 +67,20 @@ public class StateBuilder<TInput, TId>(TId stateId, bool terminal = false) : ISt
 
     public IStateBuilder<TInput, TId> GotoWhen(TId id, bool terminal, params TInput[] inputs)
     {
+        IStateBuilder<TInput, TId> stateBuilder = Context.GetStateBuilder(id, terminal);
         foreach (TInput input in inputs)
-            When(input, id, terminal);
+            When(input, stateBuilder);
         
-        return Context.GetStateBuilder(id, terminal);
+        return stateBuilder;
+    }
+
+    public IStateBuilder<TInput, TId> GotoWhen(TId id, bool terminal, params Expression<Predicate<TInput>>[] conditions)
+    {
+        IStateBuilder<TInput, TId> stateBuilder = Context.GetStateBuilder(id, terminal);
+        foreach (Expression<Predicate<TInput>> condition in conditions)
+            When(condition, stateBuilder);
+        
+        return stateBuilder;
     }
 
     public IStateBuilder<TInput, TId> Default(TId id, bool terminal = false)
@@ -110,8 +120,8 @@ public class StateBuilder<TInput, TId>(TId stateId, bool terminal = false) : ISt
         if (Terminal)
             return _state;
 
-        TryConditionalTransitionsDelegate<TInput, TId>? tryConditionalTransitions =
-            _conditionToStateBuilders.Count > 0 ? BuildTryConditionalTransitionsDelegate() : null;
+        IPredicateMap<TInput, State<TInput, TId>>? tryConditionalTransitions =
+            _conditionToStateBuilders.Count > 0 ? BuildTryConditionalTransitionsPredicateMap() : null;
 
         State<TInput, TId>? defaultTransitionState = _defaultStateBuilder?.Build();
         
@@ -122,45 +132,10 @@ public class StateBuilder<TInput, TId>(TId stateId, bool terminal = false) : ISt
         return _state;
     }
 
-    private TryConditionalTransitionsDelegate<TInput, TId> BuildTryConditionalTransitionsDelegate()
+    private IPredicateMap<TInput, State<TInput, TId>> BuildTryConditionalTransitionsPredicateMap()
     {
-        ParameterExpression inputParameterExpression = Expression.Parameter(typeof(TInput), "input");
-        ParameterExpression stateParameterExpression = Expression.Parameter(typeof(State<TInput, TId>).MakeByRefType(), "newState");
-        LabelTarget returnTarget = Expression.Label(typeof(bool));
-
-        IEnumerable<Expression> conditionIfStatements = _conditionToStateBuilders.Select(csb =>
-        {
-            State<TInput, TId> transitionState = csb.TokenizerStateBuilder.Build();
-            return BuildConditionalTransitionIfStatement(csb.ConditionExpression, transitionState, inputParameterExpression, stateParameterExpression, returnTarget);
-        });
-
-        IEnumerable<Expression> bodyStatements = conditionIfStatements
-            .Append(Expression.Assign(stateParameterExpression, Expression.Constant(null, typeof(State<TInput, TId>))))
-            .Append(Expression.Label(returnTarget, Expression.Constant(false)));
-        
-        BlockExpression body = Expression.Block(typeof(bool), bodyStatements);
-
-        return Expression.Lambda<TryConditionalTransitionsDelegate<TInput, TId>>(body, inputParameterExpression,
-            stateParameterExpression).Compile();
-    }
-    
-    private static ConditionalExpression BuildConditionalTransitionIfStatement(Expression<Func<TInput, bool>> checkCondition,
-        State<TInput, TId> transitionState,
-        ParameterExpression inputParameter,
-        ParameterExpression outParameter, 
-        LabelTarget returnTarget)
-    {
-        InvocationExpression checkConditionInvocationExpression = Expression.Invoke(checkCondition, inputParameter);
-        
-        Expression[] thenBodyStatements =
-        [
-            Expression.Assign(outParameter, Expression.Constant(transitionState)),
-            Expression.Return(returnTarget, Expression.Constant(true))
-        ];
-        
-        BlockExpression thenBody = Expression.Block(thenBodyStatements);
-        
-        return Expression.IfThen(checkConditionInvocationExpression, thenBody);
+        return _conditionToStateBuilders.ToPredicateMap(csb => csb.ConditionExpression,
+            csb => csb.TokenizerStateBuilder.Build());
     }
 
     private void CheckIfAlreadyBuilt()
@@ -176,7 +151,7 @@ public class StateBuilder<TInput, TId>(TId stateId, bool terminal = false) : ISt
     }
 
     private readonly record struct ConditionToStateBuilder(
-        Expression<Func<TInput, bool>> ConditionExpression,
+        Expression<Predicate<TInput>> ConditionExpression,
         IStateBuilder<TInput, TId> TokenizerStateBuilder);
 
     internal class StateBuilderContext(IStateBuilder<TInput, TId> sourceBuilder)

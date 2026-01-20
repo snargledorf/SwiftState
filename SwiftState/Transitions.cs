@@ -1,8 +1,10 @@
+using PredicateMap;
+
 namespace SwiftState;
 
-public record Transitions<TInput, TData>(
-    TryConditionalTransitionsDelegate<TInput, TData>? TryConditionalTransitions,
-    State<TInput, TData>? DefaultState)
+internal record Transitions<TInput, TId>(
+    IPredicateMap<TInput, State<TInput, TId>>? TryConditionalTransitions,
+    State<TInput, TId>? DefaultState) where TInput : notnull
 {
     public bool HasTransitions { get; } = TryConditionalTransitions is not null ||
                                           DefaultState is not null;

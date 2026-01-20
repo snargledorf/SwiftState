@@ -2,7 +2,7 @@
 
 namespace SwiftState;
 
-public interface IStateTransitionHandler<TInput, TId>
+public interface IStateTransitionHandler<TInput, TId> where TInput : notnull
 {
     State<TInput, TId>? DefaultState { get; }
     bool HasTransitions { get; }
